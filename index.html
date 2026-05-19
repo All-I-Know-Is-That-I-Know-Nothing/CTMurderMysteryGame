@@ -1,0 +1,1406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Behind the Interface — Day 1 Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Caveat:wght@400;600;700&family=VT323&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --purple-deep: #443558;
+  --purple-black: #31263E;
+  --near-black: #221E22;
+  --amber: #ECA72C;
+  --orange-red: #EE5822;
+
+  --paper-light: #f3e7c8;
+  --paper-mid:   #e8d6a8;
+  --paper-edge:  #c8ad6f;
+  --ink:         #2a2520;
+  --ink-soft:    #5a4f42;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #0d0a10;
+  color: var(--paper-light);
+  font-family: 'Lora', Georgia, serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+.stage {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+#game {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #1a141f;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+  border-radius: 4px;
+}
+
+/* ---- HUD top-left ---- */
+.hud {
+  position: fixed;
+  top: 14px;
+  left: 18px;
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  letter-spacing: 1px;
+  color: rgba(243, 231, 200, 0.85);
+  background: rgba(34, 30, 34, 0.55);
+  padding: 4px 12px;
+  border-radius: 4px;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.5);
+  z-index: 5;
+}
+
+/* ---- Objective top-right ---- */
+.objective {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  max-width: 280px;
+  font-family: 'Caveat', cursive;
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--paper-light);
+  background: rgba(34, 30, 34, 0.6);
+  padding: 8px 14px;
+  border-left: 3px solid var(--amber);
+  border-radius: 4px;
+  z-index: 5;
+  transition: opacity 0.25s;
+}
+.objective .label {
+  display: block;
+  font-family: 'VT323', monospace;
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: var(--amber);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* ---- Interact prompt floating over player ---- */
+.prompt {
+  position: fixed;
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  letter-spacing: 1px;
+  color: #fff;
+  background: rgba(34, 30, 34, 0.85);
+  border: 1px solid var(--amber);
+  padding: 2px 8px;
+  border-radius: 3px;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  z-index: 6;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+.prompt .key {
+  color: var(--amber);
+  font-weight: bold;
+}
+
+/* ---- Tutorial card ---- */
+.tutorial {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0,0,0,0.55);
+  z-index: 20;
+  backdrop-filter: blur(2px);
+}
+.tutorial .card {
+  background:
+    radial-gradient(ellipse at 30% 25%, var(--paper-light) 0%, var(--paper-mid) 80%, var(--paper-edge) 100%);
+  color: var(--ink);
+  padding: 32px 36px 26px;
+  border-radius: 6px;
+  width: 460px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  position: relative;
+}
+.tutorial .card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45  0 0 0 0 0.35  0 0 0 0 0.18  0 0 0 0.16 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  mix-blend-mode: multiply;
+  border-radius: 6px;
+}
+.tutorial h2 {
+  font-family: 'Lora', serif;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+  font-size: 26px;
+}
+.tutorial .sub {
+  font-family: 'Caveat', cursive;
+  font-size: 22px;
+  color: var(--ink-soft);
+  margin: 0 0 16px 0;
+}
+.tutorial .keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 16px;
+  font-family: 'Lora', serif;
+  font-size: 16px;
+}
+.tutorial .keys b {
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  letter-spacing: 1.5px;
+  background: var(--ink);
+  color: var(--paper-light);
+  padding: 2px 10px;
+  border-radius: 3px;
+  justify-self: start;
+}
+.tutorial .dismiss {
+  margin-top: 22px;
+  font-family: 'Caveat', cursive;
+  font-size: 22px;
+  color: var(--ink-soft);
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+.tutorial .dismiss b {
+  font-family: 'VT323', monospace;
+  background: var(--ink);
+  color: var(--paper-light);
+  padding: 1px 8px;
+  border-radius: 3px;
+  letter-spacing: 1.5px;
+}
+
+/* ---- Dialogue panel (bottom) ---- */
+.dialogue {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(820px, calc(100vw - 40px));
+  background:
+    radial-gradient(ellipse at 30% 25%, var(--paper-light) 0%, var(--paper-mid) 80%, var(--paper-edge) 100%);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 18px 22px 16px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.55);
+  z-index: 15;
+  position: fixed;
+}
+.dialogue::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45  0 0 0 0 0.35  0 0 0 0 0.18  0 0 0 0.16 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  mix-blend-mode: multiply;
+  border-radius: 6px;
+}
+.dialogue .speaker {
+  font-family: 'Caveat', cursive;
+  font-size: 22px;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+.dialogue .speaker.player { color: var(--orange-red); }
+.dialogue .line {
+  font-family: 'Lora', serif;
+  font-size: 18px;
+  line-height: 1.45;
+  margin: 0 0 8px 0;
+  color: var(--ink);
+  min-height: 26px;
+}
+.dialogue .choices {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dialogue .choices li {
+  font-family: 'VT323', monospace;
+  font-size: 19px;
+  letter-spacing: 0.5px;
+  padding: 6px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  color: var(--ink);
+  transition: background 0.12s;
+}
+.dialogue .choices li .num {
+  color: var(--orange-red);
+  font-weight: bold;
+  min-width: 22px;
+}
+.dialogue .choices li:hover,
+.dialogue .choices li.is-focused {
+  background: rgba(238, 88, 34, 0.10);
+}
+.dialogue .choices li.is-spent {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.dialogue .choices li.is-spent .num {
+  color: var(--ink-soft);
+}
+.dialogue .ct-tag {
+  margin-left: 8px;
+  font-family: 'Lora', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--orange-red);
+}
+.dialogue .continue-hint {
+  font-family: 'Caveat', cursive;
+  font-size: 18px;
+  color: var(--ink-soft);
+  text-align: right;
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+}
+.dialogue .continue-hint b {
+  font-family: 'VT323', monospace;
+  background: var(--ink);
+  color: var(--paper-light);
+  padding: 0 6px;
+  border-radius: 2px;
+  letter-spacing: 1.5px;
+  font-size: 14px;
+}
+
+/* ---- Scene transition fade ---- */
+.fade {
+  position: fixed;
+  inset: 0;
+  background: var(--near-black);
+  z-index: 25;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.45s;
+}
+.fade.is-active { opacity: 1; pointer-events: all; }
+
+.fade .caption {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Caveat', cursive;
+  font-size: 32px;
+  color: var(--paper-light);
+  letter-spacing: 1px;
+  opacity: 0;
+  transition: opacity 0.4s;
+  text-align: center;
+  width: 80%;
+}
+.fade.is-active .caption { opacity: 1; }
+
+/* ---- Hidden helper ---- */
+.hidden { display: none !important; }
+
+/* ---- Footer hint ---- */
+.controls-hint {
+  position: fixed;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'VT323', monospace;
+  font-size: 13px;
+  color: rgba(243, 231, 200, 0.4);
+  letter-spacing: 1.5px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* ---- Loading splash ---- */
+.loader {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #0d0a10;
+  color: var(--paper-light);
+  z-index: 30;
+  font-family: 'Caveat', cursive;
+  font-size: 28px;
+  letter-spacing: 1px;
+}
+</style>
+</head>
+<body>
+
+<div class="loader" id="loader">Loading…</div>
+
+<div class="hud hidden" id="hud">DAY 1 · 09:32</div>
+<div class="objective hidden" id="objective"><span class="label">Objective</span><span id="objectiveText">Walk up to the security guard.</span></div>
+
+<div class="stage">
+  <canvas id="game" width="632" height="424"></canvas>
+</div>
+
+<div class="prompt hidden" id="prompt"><span class="key">[E]</span> <span id="promptText">Talk</span></div>
+
+<div class="dialogue hidden" id="dialogue">
+  <div class="speaker" id="dlgSpeaker">—</div>
+  <p class="line" id="dlgLine">…</p>
+  <ul class="choices hidden" id="dlgChoices"></ul>
+  <div class="continue-hint" id="dlgHint"><b>SPACE</b> or <b>E</b> to continue</div>
+</div>
+
+<div class="tutorial hidden" id="tutorial">
+  <div class="card">
+    <h2>Behind the Interface</h2>
+    <div class="sub">Day 1. You've just arrived at Harrow.</div>
+    <div class="keys">
+      <b>WASD</b> <span>or arrow keys to walk</span>
+      <b>E</b> <span>interact with people and objects</span>
+      <b>SPACE</b> <span>advance dialogue</span>
+    </div>
+    <div class="dismiss">Press <b>ANY KEY</b> to begin.</div>
+  </div>
+</div>
+
+<div class="fade" id="fade"><div class="caption" id="fadeCaption"></div></div>
+
+<div class="controls-hint">WASD / arrows · E interact · SPACE continue</div>
+
+<script>
+/* ============================================================
+   Behind the Interface — Day 1 prototype
+   Scenes: Outside → Forum → Auditorium
+   Vanilla HTML / CSS / JS, single file.
+   ============================================================ */
+
+/* ---------- Sprite assets ----------
+   Each character: 4 PNGs (north/south/east/west), 92×92 transparent.
+   Drop new characters under art/sprites/<id>/<dir>.png and add an entry below.
+*/
+const SPRITE_SETS = {
+  detective:    'art/sprites/detective',
+  guard:        'art/sprites/guard',
+  canteen:      'art/sprites/canteen',
+  ex:           'art/sprites/ex',
+  bestie:       'art/sprites/bestie',
+  flatmate:     'art/sprites/flatmate',
+  janitor:      'art/sprites/janitor',
+  hos:          'art/sprites/hos',
+  receptionist: 'art/sprites/receptionist'
+};
+const SPR_SIZE = 92;
+const SPR_FOOT_X = 46;
+const SPR_FOOT_Y = 78;
+const SPRITES = {};
+const DIR_ALIAS = { up:'north', down:'south', left:'west', right:'east' };
+
+/* ---------- Background assets ---------- */
+const BG_PATHS = {
+  outside:    'art/bg/outside.png',
+  forum:      'art/bg/forum.png',
+  auditorium: 'art/bg/auditorium.png'
+};
+const BGS = {};
+
+function loadAssets() {
+  const tasks = [];
+  // sprites
+  const dirs = ['north', 'south', 'east', 'west'];
+  for (const [id, base] of Object.entries(SPRITE_SETS)) {
+    SPRITES[id] = {};
+    for (const d of dirs) {
+      tasks.push(new Promise(res => {
+        const img = new Image();
+        img.onload  = () => { SPRITES[id][d] = img; res(); };
+        img.onerror = () => { SPRITES[id][d] = null; res(); };
+        img.src = `${base}/${d}.png`;
+      }));
+    }
+  }
+  // backgrounds
+  for (const [id, src] of Object.entries(BG_PATHS)) {
+    tasks.push(new Promise(res => {
+      const img = new Image();
+      img.onload  = () => { BGS[id] = img; res(); };
+      img.onerror = () => { BGS[id] = null; res(); };
+      img.src = src;
+    }));
+  }
+  return Promise.all(tasks);
+}
+
+function drawCharacterSprite(setId, dir, cx, footY, bobPhase = 0) {
+  const set = SPRITES[setId];
+  if (!set) return false;
+  const key = DIR_ALIAS[dir] || dir;
+  const img = set[key] || set.south;
+  if (!img) return false;
+  const bob = Math.abs(Math.sin(bobPhase)) * 1.5;
+  ctx.drawImage(
+    img,
+    Math.round(cx - SPR_FOOT_X),
+    Math.round(footY - SPR_FOOT_Y - bob)
+  );
+  return true;
+}
+
+/* ---------- Palette (still used for accents, fades, fallback) ---------- */
+const PALETTE = {
+  ink:       '#2a2520',
+  amber:     '#eca72c',
+  orange:    '#ee5822',
+  paper:     '#f3e7c8',
+  shadow:    'rgba(0,0,0,0.35)',
+};
+
+/* ---------- Game state ---------- */
+const game = {
+  scene: 'outside',
+  flags: {
+    tutorialDone: false,
+    metGuard: false,
+    askedDetails: false,
+    askedDirections: false,
+    saidThanks: false,
+    enteredForum: false,
+    metHoS: false,
+    askedHosTime: false,    // misleading line received
+    askedHosEnemies: false,
+    enteredAuditorium: false,
+    examinedBody: false,
+    cutsceneDone: false
+  },
+  inDialogue: false,
+  dialogueState: null,
+  fadeBusy: false,
+  time: { day: 1, hh: 9, mm: 32 }
+};
+
+const player = {
+  x: 0, y: 0, w: 18, h: 22,
+  speed: 130,
+  dir: 'down',
+  walkPhase: 0
+};
+
+/* ============================================================
+   SCENES
+   Canvas is resized per scene to match its background's natural
+   resolution, then CSS-scaled to fit the viewport.
+   Walls / entity positions are in scene pixel coords.
+   ============================================================ */
+const scenes = {
+
+  /* -------- OUTSIDE (632 × 424) -------- */
+  outside: {
+    w: 632, h: 424,
+    spawn: { x: 315, y: 395 },
+    walls: [
+      // Forum building wall along the top — opening for door is at x=255..380
+      { x: 0,   y: 0,   w: 255, h: 130 },
+      { x: 380, y: 0,   w: 252, h: 130 },
+      // ledge under the door (small step)
+      { x: 255, y: 0,   w: 125, h: 18  },
+      // Brick planter with tree + grass on the left
+      { x: 0,   y: 130, w: 230, h: 165 },
+      // Long bench on lower-left (next to postbox)
+      { x: 0,   y: 295, w: 165, h: 45  },
+      // Postbox + short post by the path edge
+      { x: 190, y: 270, w: 55,  h: 70  },
+      // Standing sign / kiosk on the right of the path
+      { x: 380, y: 130, w: 35,  h: 100 },
+      // Long bench top-right
+      { x: 440, y: 130, w: 115, h: 45  },
+      // Bin / standing kiosk further right
+      { x: 555, y: 165, w: 40,  h: 80  },
+      // Noticeboard
+      { x: 410, y: 250, w: 145, h: 65  },
+      // Right brick wall
+      { x: 595, y: 0,   w: 37,  h: 175 },
+      // Canvas edges
+      { x: -10, y: 0,   w: 10,  h: 424 },
+      { x: 632, y: 0,   w: 10,  h: 424 },
+      { x: 0,   y: 424, w: 632, h: 10  },
+    ],
+    entities: [],
+    onEnter: () => {}
+  },
+
+  /* -------- FORUM (632 × 424) -------- */
+  forum: {
+    w: 632, h: 424,
+    spawn: { x: 305, y: 350 },
+    walls: [
+      // Top wall (corridor wall). Three doors: top-left ~ Auditorium (x=15..70),
+      // mid-left ~ corridor (x=140..195, locked), mid-right ~ corridor (x=345..400, locked).
+      // We model the wall as a full strip with cut-outs.
+      { x: 0,   y: 0,   w: 15,  h: 60 },
+      { x: 70,  y: 0,   w: 70,  h: 60 },
+      { x: 195, y: 0,   w: 150, h: 60 },
+      { x: 400, y: 0,   w: 232, h: 60 },
+      // Cafe counter + bar + stairs (top-right corner, big block)
+      { x: 405, y: 60,  w: 227, h: 115 },
+      // (stools removed so the canteen guy is reachable across the bar)
+      // Central sofa cluster
+      { x: 255, y: 175, w: 155, h: 110 },
+      // Orange L-shaped sofa on the left wall
+      { x: 0,   y: 120, w: 95,  h: 180 },
+      { x: 0,   y: 270, w: 165, h: 35  },
+      // Bottom wall, with door cut-outs:
+      // double-door back to Outside at x=270..335
+      // side door at x=5..50 (locked)
+      { x: 0,   y: 360, w: 5,   h: 64 },
+      { x: 50,  y: 360, w: 220, h: 64 },
+      { x: 335, y: 360, w: 297, h: 64 },
+      // Left + right edges
+      { x: -10, y: 0,   w: 10,  h: 424 },
+      { x: 632, y: 0,   w: 10,  h: 424 },
+    ],
+    entities: [],
+    onEnter: () => {}
+  },
+
+  /* -------- AUDITORIUM (528 × 386) -------- */
+  auditorium: {
+    w: 528, h: 386,
+    spawn: { x: 264, y: 320 },
+    walls: [
+      // Stage / proscenium (whole top region — body chalk-outline is below it on floor)
+      { x: 0,   y: 0,   w: 528, h: 120 },
+      // Left seat bank (impassable)
+      { x: 0,   y: 120, w: 130, h: 215 },
+      // Right seat bank
+      { x: 395, y: 120, w: 133, h: 215 },
+      // South wall with door cut-out (door at x=225..295)
+      { x: 0,   y: 335, w: 225, h: 51 },
+      { x: 295, y: 335, w: 233, h: 51 },
+      // Edges
+      { x: -10, y: 0,   w: 10,  h: 386 },
+      { x: 528, y: 0,   w: 10,  h: 386 },
+    ],
+    entities: [],
+    onEnter: () => {}
+  }
+};
+
+/* ---------- Entities ---------- */
+
+// OUTSIDE
+scenes.outside.entities.push({
+  id: 'guard',
+  type: 'npc',
+  x: 355, y: 245, w: 22, h: 26,
+  promptLabel: 'Talk to security',
+  facing: 'west',
+  spriteSet: 'guard',
+  interact: () => startGuardDialogue()
+});
+scenes.outside.entities.push({
+  id: 'forumDoor',
+  type: 'door',
+  x: 295, y: 0, w: 50, h: 25,
+  promptLabel: 'Enter the Forum',
+  locked: () => !game.flags.metGuard,
+  onLockedMessage: 'I should speak to the security guard first.',
+  interact: () => transitionTo('forum', 'You step inside the Forum…')
+});
+
+// FORUM
+scenes.forum.entities.push({
+  id: 'hos',
+  type: 'npc',
+  x: 220, y: 155, w: 22, h: 26,
+  promptLabel: 'Speak with the Head of School',
+  facing: 'south',
+  spriteSet: 'hos',
+  interact: () => startHoSDialogue()
+});
+scenes.forum.entities.push({
+  id: 'receptionist',
+  type: 'npc',
+  x: 110, y: 90, w: 22, h: 26,
+  promptLabel: 'Talk to the receptionist',
+  facing: 'south',
+  spriteSet: 'receptionist',
+  interact: () => startReceptionistDialogue()
+});
+scenes.forum.entities.push({
+  id: 'canteen',
+  type: 'npc',
+  x: 575, y: 165, w: 22, h: 26,
+  promptLabel: 'Talk to the canteen guy',
+  facing: 'south',
+  spriteSet: 'canteen',
+  interact: () => startCanteenDialogue()
+});
+scenes.forum.entities.push({
+  id: 'auditoriumDoor',
+  type: 'door',
+  x: 20, y: 30, w: 50, h: 30,
+  promptLabel: 'Enter the auditorium',
+  locked: () => !game.flags.metHoS,
+  onLockedMessage: "The receptionist's standing by the door. She won't let me through until the Head of School's briefed me.",
+  interact: () => transitionTo('auditorium', 'You step into the auditorium…')
+});
+scenes.forum.entities.push({
+  id: 'forumExit',
+  type: 'door',
+  x: 280, y: 380, w: 55, h: 30,
+  promptLabel: 'Step back outside',
+  interact: () => transitionTo('outside', 'You step back outside…')
+});
+// (locked side door — flavour only)
+scenes.forum.entities.push({
+  id: 'sideDoorLocked',
+  type: 'door',
+  x: 10, y: 380, w: 40, h: 30,
+  promptLabel: 'Try the side door',
+  locked: () => true,
+  onLockedMessage: 'Locked. A keypad — staff only.',
+  interact: () => {}
+});
+
+// AUDITORIUM
+scenes.auditorium.entities.push({
+  id: 'doorBack',
+  type: 'door',
+  x: 235, y: 350, w: 50, h: 25,
+  promptLabel: 'Step back into the Forum',
+  locked: () => !game.flags.cutsceneDone,   // can't leave until cutscene plays
+  onLockedMessage: '…',
+  interact: () => transitionTo('forum', 'You step back into the Forum…')
+});
+scenes.auditorium.entities.push({
+  id: 'body',
+  type: 'body',
+  x: 230, y: 180, w: 65, h: 70,
+  promptLabel: 'Examine the chalk outline',
+  interact: () => triggerCrimeSceneCutscene()
+});
+scenes.auditorium.entities.push({
+  id: 'bag',
+  type: 'object',
+  x: 220, y: 240, w: 30, h: 25,
+  promptLabel: "Examine the victim's bag",
+  interact: () => runDialogue([
+    { speaker: 'You', player: true,
+      line: `<em>(A canvas backpack, on its side. Notebooks half-spilled, biro caps everywhere. A protein-shake bottle, half-empty, lid on tight.)</em>` },
+    { speaker: 'You', player: true,
+      line: `<em>(The label's been rubbed off. Not a brand I recognise. Worth a note for the lab.)</em>` }
+  ])
+});
+scenes.auditorium.entities.push({
+  id: 'evidence',
+  type: 'object',
+  x: 300, y: 215, w: 30, h: 25,
+  promptLabel: 'Examine the scattered papers',
+  interact: () => runDialogue([
+    { speaker: 'You', player: true,
+      line: `<em>(Lecture handouts, a textbook splayed open. The dates are from last week's seminars. Nothing dated yesterday.)</em>` },
+    { speaker: 'You', player: true,
+      line: `<em>(Whoever found him didn't tidy. Forensics haven't been thorough either.)</em>` }
+  ])
+});
+scenes.auditorium.entities.push({
+  id: 'stageChair',
+  type: 'object',
+  x: 425, y: 80, w: 50, h: 50,
+  promptLabel: 'Look at the taped-off chair',
+  interact: () => runDialogue([
+    { speaker: 'You', player: true,
+      line: `<em>(A chair on the stage, wrapped in police tape. Out of place — the body was found on the floor, not up here. Why was this one bagged?)</em>` }
+  ])
+});
+
+/* ============================================================
+   RENDERING
+   ============================================================ */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+function applyCanvasSize() {
+  const s = scenes[game.scene];
+  if (canvas.width !== s.w || canvas.height !== s.h) {
+    canvas.width  = s.w;
+    canvas.height = s.h;
+    ctx.imageSmoothingEnabled = false;
+  }
+}
+
+function drawBackground() {
+  const s = scenes[game.scene];
+  const img = BGS[game.scene];
+  if (img) {
+    ctx.drawImage(img, 0, 0, s.w, s.h);
+  } else {
+    // fallback flat fill
+    ctx.fillStyle = '#1a141f';
+    ctx.fillRect(0, 0, s.w, s.h);
+    ctx.fillStyle = '#5a4f42';
+    ctx.font = '14px VT323, monospace';
+    ctx.fillText('[missing background: ' + game.scene + ']', 12, 24);
+  }
+}
+
+function drawEntities(scene) {
+  // floor-level entities first (body chalk outline is already in the bg art,
+  // but the interactable glow goes here)
+  for (const e of scene.entities) {
+    if (e.type === 'body' && !game.flags.examinedBody) drawBodyGlow(e);
+  }
+  // player
+  drawPlayer();
+  // NPCs after, so they overlap correctly
+  for (const e of scene.entities) {
+    if (e.type === 'npc') drawNpc(e);
+  }
+}
+
+function drawPlayer() {
+  ctx.fillStyle = PALETTE.shadow;
+  ctx.beginPath();
+  ctx.ellipse(player.x, player.y + player.h/2 + 2, 11, 4, 0, 0, Math.PI*2);
+  ctx.fill();
+  drawCharacterSprite('detective', player.dir, player.x, player.y + player.h/2, player.walkPhase);
+}
+
+function drawNpc(e) {
+  ctx.fillStyle = PALETTE.shadow;
+  ctx.beginPath();
+  ctx.ellipse(e.x, e.y + 14, 12, 4, 0, 0, Math.PI*2);
+  ctx.fill();
+  if (e.spriteSet) {
+    drawCharacterSprite(e.spriteSet, e.facing || 'south', e.x, e.y + (e.h||0)/2, 0);
+  }
+}
+
+function drawBodyGlow(e) {
+  // A soft amber pulse over the chalk-outline area to invite interaction.
+  const t = performance.now()/450;
+  const r = 18 + Math.sin(t)*4;
+  const cx = e.x + e.w/2, cy = e.y + e.h/2;
+  const grad = ctx.createRadialGradient(cx, cy, 4, cx, cy, r*2);
+  grad.addColorStop(0, 'rgba(236, 167, 44, 0.35)');
+  grad.addColorStop(1, 'rgba(236, 167, 44, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r*2, 0, Math.PI*2);
+  ctx.fill();
+}
+
+/* ============================================================
+   COLLISION + INTERACTION
+   ============================================================ */
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+function tryMove(dx, dy) {
+  const scene = scenes[game.scene];
+  // try x
+  const trial1 = { x: player.x + dx - player.w/2, y: player.y - player.h/2, w: player.w, h: player.h };
+  let blocked = false;
+  for (const w of scene.walls) { if (w.w <= 0 || w.h <= 0) continue; if (rectsOverlap(trial1, w)) { blocked = true; break; } }
+  if (!blocked && trial1.x >= 0 && trial1.x + trial1.w <= scene.w) player.x += dx;
+  // try y
+  const trial2 = { x: player.x - player.w/2, y: player.y + dy - player.h/2, w: player.w, h: player.h };
+  blocked = false;
+  for (const w of scene.walls) { if (w.w <= 0 || w.h <= 0) continue; if (rectsOverlap(trial2, w)) { blocked = true; break; } }
+  if (!blocked && trial2.y >= 0 && trial2.y + trial2.h <= scene.h) player.y += dy;
+}
+
+function nearestInteractable() {
+  const scene = scenes[game.scene];
+  let best = null, bestD = 999;
+  for (const e of scene.entities) {
+    if (!e.interact) continue;
+    if (e.id === 'body' && game.flags.examinedBody) continue;
+    if (e.id === 'doorBack' && !game.flags.cutsceneDone) continue;
+    if (e.type === 'object' && game.flags.examinedBody) continue; // hide after cutscene starts
+    const cx = e.x + (e.w||0)/2, cy = e.y + (e.h||0)/2;
+    const d = Math.hypot(player.x - cx, player.y - cy);
+    const radius = e.type === 'npc' ? 56 : (e.type === 'door' ? 70 : 80);
+    if (d <= radius && d < bestD) { best = e; bestD = d; }
+  }
+  return best;
+}
+
+/* ============================================================
+   DIALOGUE SYSTEM
+   ============================================================ */
+const dlgEl = document.getElementById('dialogue');
+const dlgSpeaker = document.getElementById('dlgSpeaker');
+const dlgLine = document.getElementById('dlgLine');
+const dlgChoices = document.getElementById('dlgChoices');
+const dlgHint = document.getElementById('dlgHint');
+
+function showDialogue() { dlgEl.classList.remove('hidden'); game.inDialogue = true; }
+function hideDialogue() { dlgEl.classList.add('hidden'); game.inDialogue = false; game.dialogueState = null; }
+
+function runDialogue(nodes, startIndex = 0, onEnd = null) {
+  game.dialogueState = { nodes, index: startIndex, onEnd, focused: 0 };
+  showDialogue();
+  renderDialogueNode();
+}
+
+function renderDialogueNode() {
+  const ds = game.dialogueState;
+  if (!ds) return;
+  const node = ds.nodes[ds.index];
+  if (!node) { hideDialogue(); ds.onEnd && ds.onEnd(); return; }
+
+  dlgSpeaker.textContent = node.speaker || '';
+  dlgSpeaker.classList.toggle('player', !!node.player);
+  dlgLine.innerHTML = node.line || '';
+
+  if (node.choices && node.choices.length) {
+    dlgChoices.classList.remove('hidden');
+    dlgHint.classList.add('hidden');
+    dlgChoices.innerHTML = '';
+    node.choices.forEach((c, i) => {
+      const li = document.createElement('li');
+      const spent = c.spent && c.spent();
+      li.className = (i === ds.focused ? 'is-focused ' : '') + (spent ? 'is-spent' : '');
+      li.innerHTML = `<span class="num">${i+1}.</span> ${c.label}${c.ct ? `<span class="ct-tag">— ${c.ct}</span>` : ''}`;
+      li.addEventListener('click', () => choose(i));
+      dlgChoices.appendChild(li);
+    });
+  } else {
+    dlgChoices.classList.add('hidden');
+    dlgHint.classList.remove('hidden');
+  }
+}
+
+function choose(i) {
+  const ds = game.dialogueState;
+  if (!ds) return;
+  const node = ds.nodes[ds.index];
+  if (!node || !node.choices) return;
+  const c = node.choices[i];
+  if (!c) return;
+  if (c.action) c.action();
+  if (c.gotoIndex !== undefined) {
+    ds.index = c.gotoIndex;
+    renderDialogueNode();
+  } else if (c.gotoNodes) {
+    const nodes = typeof c.gotoNodes === 'function' ? c.gotoNodes() : c.gotoNodes;
+    runDialogue(nodes, 0, ds.onEnd);
+  } else {
+    advance();
+  }
+}
+
+function advance() {
+  const ds = game.dialogueState;
+  if (!ds) return;
+  const node = ds.nodes[ds.index];
+  if (node && node.choices) return;
+  ds.index++;
+  if (ds.index >= ds.nodes.length) {
+    const onEnd = ds.onEnd;
+    hideDialogue();
+    onEnd && onEnd();
+  } else {
+    renderDialogueNode();
+  }
+}
+
+/* ============================================================
+   SCENE TRANSITIONS
+   ============================================================ */
+const fadeEl = document.getElementById('fade');
+const fadeCaption = document.getElementById('fadeCaption');
+
+async function transitionTo(sceneId, caption='') {
+  if (game.fadeBusy) return;
+  game.fadeBusy = true;
+  fadeCaption.textContent = caption;
+  fadeEl.classList.add('is-active');
+  await wait(500);
+  game.scene = sceneId;
+  applyCanvasSize();
+  fitCanvas();
+  const s = scenes[sceneId];
+  // sensible spawn — if returning to outside from forum, place player by the forum door
+  if (sceneId === 'outside' && game.flags.enteredForum) {
+    player.x = 315; player.y = 130;
+  } else if (sceneId === 'forum' && game.flags.enteredAuditorium && !game.flags.cutsceneDone) {
+    player.x = 305; player.y = 350;
+  } else if (sceneId === 'forum' && game.flags.cutsceneDone) {
+    // returning to forum after the auditorium cutscene
+    player.x = 60; player.y = 100;
+  } else {
+    player.x = s.spawn.x; player.y = s.spawn.y;
+  }
+  if (sceneId === 'forum') game.flags.enteredForum = true;
+  if (sceneId === 'auditorium') game.flags.enteredAuditorium = true;
+  s.onEnter && s.onEnter();
+  refreshObjective();
+  await wait(450);
+  fadeEl.classList.remove('is-active');
+  await wait(400);
+  game.fadeBusy = false;
+}
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* ============================================================
+   DIALOGUE SCRIPTS
+   ============================================================ */
+
+/* --- Security guard --- */
+function startGuardDialogue() {
+  const opening = [
+    { speaker: 'You', player: true,
+      line: `"I'm Detective ____ — here about the death that was reported this morning. What can you tell me?"` },
+    { speaker: 'Security Guard',
+      line: `"Afternoon, Detective. Body's in the auditorium. A staff member found him this morning, around eleven."` },
+    { speaker: 'Security Guard',
+      line: `"Can't say much more out here. What can I do for you?"`,
+      choices: [
+        {
+          label: 'Can you give me any other details?',
+          ct: 'Asking meaningful questions',
+          spent: () => game.flags.askedDetails,
+          gotoNodes: () => branchGuardDetails()
+        },
+        {
+          label: 'Where do I go?',
+          spent: () => game.flags.askedDirections,
+          gotoNodes: () => branchGuardDirections()
+        },
+        {
+          label: 'Thank you.',
+          gotoNodes: () => branchGuardThanks()
+        }
+      ]
+    }
+  ];
+  runDialogue(opening, 0, () => {
+    game.flags.metGuard = true;
+    refreshObjective();
+  });
+}
+
+function branchGuardDetails() {
+  game.flags.askedDetails = true;
+  return [
+    { speaker: 'Security Guard',
+      line: `"There was a class in there yesterday evening — media, I think. Don't quote me on that. Staff'll know better."` },
+    { speaker: 'Security Guard',
+      line: `"Head of School is in the Forum, just through those doors. She'll be expecting you."` },
+    { speaker: 'Security Guard',
+      line: `"Anything else?"`,
+      choices: [
+        { label: 'Where do I go?',  spent: () => game.flags.askedDirections, gotoNodes: () => branchGuardDirections() },
+        { label: 'Thank you.', gotoNodes: () => branchGuardThanks() }
+      ]
+    }
+  ];
+}
+
+function branchGuardDirections() {
+  game.flags.askedDirections = true;
+  return [
+    { speaker: 'Security Guard',
+      line: `"Up the path, through the front doors — that's the Forum. Head of School wants a word before you go to the scene. Auditorium's the door on your left once you're inside."` },
+    { speaker: 'Security Guard',
+      line: `"Anything else?"`,
+      choices: [
+        { label: 'Can you give me any other details?', ct: 'Asking meaningful questions', spent: () => game.flags.askedDetails, gotoNodes: () => branchGuardDetails() },
+        { label: 'Thank you.', gotoNodes: () => branchGuardThanks() }
+      ]
+    }
+  ];
+}
+
+function branchGuardThanks() {
+  return [
+    { speaker: 'Security Guard',
+      line: `"I hope you can catch whoever did this."` }
+  ];
+}
+
+/* --- Head of School --- (from dialogue spreadsheet, HOS_001 / 002 / 003) */
+function startHoSDialogue() {
+  // First meeting: she speaks first.
+  const opening = [
+    { speaker: 'Head of School',
+      line: `"Thank you for coming so quickly, Detective. We're all… still processing. The student was found in the auditorium yesterday morning. Please — anything you need."` },
+    { speaker: 'Head of School',
+      line: `"How can I help?"`,
+      choices: [
+        {
+          label: 'When was he last seen alive?',
+          ct: 'Evaluating evidence',
+          spent: () => game.flags.askedHosTime,
+          gotoNodes: () => branchHosTime()
+        },
+        {
+          label: 'Did he have any enemies on campus?',
+          ct: 'Considering multiple viewpoints',
+          spent: () => game.flags.askedHosEnemies,
+          gotoNodes: () => branchHosEnemies()
+        },
+        {
+          label: "I'll go take a look at the scene.",
+          gotoNodes: () => branchHosLeave()
+        }
+      ]
+    }
+  ];
+  runDialogue(opening, 0, () => {
+    game.flags.metHoS = true;
+    refreshObjective();
+  });
+}
+
+function branchHosTime() {
+  game.flags.askedHosTime = true;
+  return [
+    { speaker: 'Head of School',
+      line: `"Around 9pm the night before. He was at the late-night seminar in Room 304 — I checked the attendance list myself this morning."` },
+    { speaker: 'You', player: true,
+      line: `<em>(Clue added to journal: <b>CL_HOS_TIME_9PM</b> — last seen 9pm, Room 304. Sounds firm. Maybe too firm.)</em>` },
+    { speaker: 'Head of School',
+      line: `"Anything else?"`,
+      choices: [
+        { label: 'Did he have any enemies on campus?', ct: 'Considering multiple viewpoints', spent: () => game.flags.askedHosEnemies, gotoNodes: () => branchHosEnemies() },
+        { label: "I'll go take a look at the scene.", gotoNodes: () => branchHosLeave() }
+      ]
+    }
+  ];
+}
+
+function branchHosEnemies() {
+  game.flags.askedHosEnemies = true;
+  return [
+    { speaker: 'Head of School',
+      line: `"Not that I'm aware of. He had some… interpersonal frictions, perhaps. Nothing I'd call serious. The students will know more than I do, frankly."` },
+    { speaker: 'Head of School',
+      line: `"Anything else?"`,
+      choices: [
+        { label: 'When was he last seen alive?', ct: 'Evaluating evidence', spent: () => game.flags.askedHosTime, gotoNodes: () => branchHosTime() },
+        { label: "I'll go take a look at the scene.", gotoNodes: () => branchHosLeave() }
+      ]
+    }
+  ];
+}
+
+function branchHosLeave() {
+  return [
+    { speaker: 'Head of School',
+      line: `"Of course. Please — be gentle with the students. They're frightened."` }
+  ];
+}
+
+/* --- Receptionist --- (Forum gatekeeper; no spreadsheet content yet — draft lines) */
+function startReceptionistDialogue() {
+  if (!game.flags.metHoS) {
+    runDialogue([
+      { speaker: 'Receptionist',
+        line: `"Sorry — I can't let anyone through these doors until the Head of School's spoken to them. Her instructions."` },
+      { speaker: 'Receptionist',
+        line: `"She's just there by the sofas. She's expecting you."` }
+    ]);
+  } else {
+    runDialogue([
+      { speaker: 'Receptionist',
+        line: `"Go on through. Mind the tape inside — forensics aren't done with the area."` }
+    ]);
+  }
+}
+
+/* --- Canteen Guy --- (Day 1 arc per spreadsheet: "Just a face behind the till.
+    Will chat if the player initiates." — draft Day 1 lines, supplement reveal
+    is Day 3+ and not surfaced here) */
+function startCanteenDialogue() {
+  runDialogue([
+    { speaker: 'Canteen',
+      line: `"Morning. Coffee's on. Don't take card before nine, just so you know."` },
+    { speaker: 'You', player: true,
+      line: `"Quiet today."` },
+    { speaker: 'Canteen',
+      line: `"Yeah. Everyone's gone weird since yesterday. Can't blame 'em."` },
+    { speaker: 'Canteen',
+      line: `"You a student? Don't recognise you."`,
+      choices: [
+        {
+          label: "Just transferred. Settling in.",
+          gotoNodes: [
+            { speaker: 'Canteen',
+              line: `"Right, right. Well — if you need anything that's not on the menu, ask. I know people."` }
+          ]
+        },
+        {
+          label: "Did you know the student who died?",
+          ct: 'Asking meaningful questions',
+          gotoNodes: [
+            { speaker: 'Canteen',
+              line: `"Saw him around. Used to come in most mornings. Last couple weeks though, he stopped. Brought his own bottle."` },
+            { speaker: 'You', player: true,
+              line: `<em>(Worth remembering. Ask again on a different day — maybe he'll say more.)</em>` }
+          ]
+        }
+      ]
+    }
+  ]);
+}
+
+/* --- Crime-scene cutscene --- */
+function triggerCrimeSceneCutscene() {
+  if (game.flags.examinedBody) return;
+  game.flags.examinedBody = true;
+
+  runDialogue([
+    { speaker: 'You', player: true,
+      line: `<em>(You crouch by the chalk outline. Bruises on the arms — older than the death, by the look of them. The toxicology team will have more.)</em>` },
+    { speaker: 'You', player: true,
+      line: `<em>(Papers, a half-empty bottle, a textbook. Someone's bag. The scene was processed in a hurry.)</em>` },
+    { speaker: 'You', player: true,
+      line: `<em>(Your phone buzzes. Captain.)</em>` }
+  ], 0, () => {
+    runCutsceneCaptain();
+  });
+}
+
+function runCutsceneCaptain() {
+  fadeCaption.textContent = '';
+  fadeEl.classList.add('is-active');
+  fadeEl.style.opacity = '0.85';
+  setTimeout(() => {
+    runDialogue([
+      { speaker: 'Captain',
+        line: `"That crime scene you went to today is a difficult one. A student dead in their own university — huge issue. Needs to be solved quickly."` },
+      { speaker: 'You', player: true,
+        line: `"It's going to be difficult. What's the plan?"` },
+      { speaker: 'Captain',
+        line: `"You're going in undercover as a student. We believe it'll catch whoever did this quickly and let you gather evidence from people and places we couldn't reach. Full access."` },
+      { speaker: 'You', player: true,
+        line: `"Sounds simple enough."` },
+      { speaker: 'Captain',
+        line: `"That's where you're wrong. You've got five days. Your dorm has a secure evidence board. Good luck. You start tomorrow."` },
+      { speaker: 'You', player: true,
+        line: `<em>(End of Day 1. The prototype ends here.)</em>` }
+    ], 0, () => {
+      game.flags.cutsceneDone = true;
+      fadeEl.style.opacity = '';
+      fadeEl.classList.remove('is-active');
+      setObjective('End', 'Prototype complete — press F5 to replay.');
+    });
+  }, 600);
+}
+
+/* ============================================================
+   OBJECTIVE / HUD
+   ============================================================ */
+const objText = document.getElementById('objectiveText');
+const objLabel = document.querySelector('.objective .label');
+
+function setObjective(label, text) {
+  objLabel.textContent = label;
+  objText.textContent = text;
+}
+function refreshObjective() {
+  if (game.flags.cutsceneDone) {
+    setObjective('End', 'Prototype complete.');
+  } else if (game.flags.examinedBody) {
+    setObjective('Cutscene', 'Listen to the captain.');
+  } else if (game.flags.enteredAuditorium) {
+    setObjective('Objective', 'Examine the scene. Press E.');
+  } else if (game.flags.metHoS) {
+    setObjective('Objective', 'Head into the auditorium. Top-left door.');
+  } else if (game.flags.enteredForum) {
+    setObjective('Objective', 'Introduce yourself to the Head of School.');
+  } else if (game.flags.metGuard) {
+    setObjective('Objective', 'Head inside the Forum.');
+  } else {
+    setObjective('Objective', 'Walk up to the security guard. Press E.');
+  }
+}
+
+/* ============================================================
+   INPUT
+   ============================================================ */
+const keys = new Set();
+document.addEventListener('keydown', (e) => {
+  // tutorial dismiss
+  const tut = document.getElementById('tutorial');
+  if (!game.flags.tutorialDone) {
+    game.flags.tutorialDone = true;
+    tut.classList.add('hidden');
+    return;
+  }
+
+  if (game.inDialogue) {
+    if (e.key === 'ArrowDown') {
+      const ds = game.dialogueState; if (!ds) return;
+      const node = ds.nodes[ds.index];
+      if (node && node.choices) { ds.focused = (ds.focused + 1) % node.choices.length; renderDialogueNode(); }
+      e.preventDefault(); return;
+    }
+    if (e.key === 'ArrowUp') {
+      const ds = game.dialogueState; if (!ds) return;
+      const node = ds.nodes[ds.index];
+      if (node && node.choices) { ds.focused = (ds.focused - 1 + node.choices.length) % node.choices.length; renderDialogueNode(); }
+      e.preventDefault(); return;
+    }
+    if (e.key === 'Enter' || e.key === 'e' || e.key === 'E' || e.key === ' ') {
+      const ds = game.dialogueState;
+      const node = ds && ds.nodes[ds.index];
+      if (node && node.choices) choose(ds.focused);
+      else advance();
+      e.preventDefault(); return;
+    }
+    if (/^[1-9]$/.test(e.key)) {
+      const ds = game.dialogueState;
+      const node = ds && ds.nodes[ds.index];
+      if (node && node.choices) {
+        const idx = parseInt(e.key, 10) - 1;
+        if (idx >= 0 && idx < node.choices.length) choose(idx);
+      }
+      return;
+    }
+    return;
+  }
+
+  if (e.key === 'e' || e.key === 'E') {
+    const target = nearestInteractable();
+    if (target && target.locked && target.locked()) {
+      runDialogue([{ speaker: 'You', player: true, line: `<em>(${target.onLockedMessage})</em>` }]);
+    } else if (target && target.interact) {
+      target.interact();
+    }
+    return;
+  }
+
+  keys.add(e.key.toLowerCase());
+});
+document.addEventListener('keyup', (e) => { keys.delete(e.key.toLowerCase()); });
+
+/* ============================================================
+   UPDATE / DRAW LOOP
+   ============================================================ */
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function update(dt) {
+  if (game.inDialogue) return;
+  if (game.fadeBusy) return;
+
+  let dx = 0, dy = 0;
+  if (keys.has('w') || keys.has('arrowup'))    dy -= 1;
+  if (keys.has('s') || keys.has('arrowdown'))  dy += 1;
+  if (keys.has('a') || keys.has('arrowleft'))  dx -= 1;
+  if (keys.has('d') || keys.has('arrowright')) dx += 1;
+
+  if (dx !== 0 || dy !== 0) {
+    const len = Math.hypot(dx, dy);
+    dx = (dx/len) * player.speed * dt;
+    dy = (dy/len) * player.speed * dt;
+    if (Math.abs(dy) > Math.abs(dx)) player.dir = dy < 0 ? 'up' : 'down';
+    else player.dir = dx < 0 ? 'left' : 'right';
+    player.walkPhase += dt * 10;
+    tryMove(dx, dy);
+  } else {
+    player.walkPhase = 0;
+  }
+
+  if (dx || dy) {
+    const seconds = dt * 60;
+    game.time.mm += seconds / 60;
+    while (game.time.mm >= 60) { game.time.mm -= 60; game.time.hh++; }
+    document.getElementById('hud').textContent =
+      `DAY ${game.time.day} · ${String(Math.floor(game.time.hh)).padStart(2,'0')}:${String(Math.floor(game.time.mm)).padStart(2,'0')}`;
+  }
+}
+
+function draw() {
+  const scene = scenes[game.scene];
+  ctx.clearRect(0, 0, scene.w, scene.h);
+  drawBackground();
+  drawEntities(scene);
+  updatePromptElement();
+}
+
+const promptEl = document.getElementById('prompt');
+const promptText = document.getElementById('promptText');
+function updatePromptElement() {
+  if (game.inDialogue || game.fadeBusy) { promptEl.classList.add('hidden'); return; }
+  const target = nearestInteractable();
+  if (!target) { promptEl.classList.add('hidden'); return; }
+  const label = target.promptLabel || 'Interact';
+  const locked = target.locked && target.locked();
+  promptText.textContent = label;
+  const rect = canvas.getBoundingClientRect();
+  const sx = rect.width / canvas.width;
+  const sy = rect.height / canvas.height;
+  promptEl.style.left = (rect.left + player.x * sx) + 'px';
+  promptEl.style.top  = (rect.top  + (player.y - player.h/2 - 12) * sy) + 'px';
+  promptEl.classList.remove('hidden');
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function fitCanvas() {
+  const padding = 40;
+  const scene = scenes[game.scene];
+  const maxW = window.innerWidth - padding;
+  const maxH = window.innerHeight - padding;
+  const sx = maxW / scene.w, sy = maxH / scene.h;
+  const s = Math.min(sx, sy);
+  canvas.style.width  = (scene.w * s) + 'px';
+  canvas.style.height = (scene.h * s) + 'px';
+}
+window.addEventListener('resize', fitCanvas);
+
+(async () => {
+  await loadAssets();
+  document.getElementById('loader').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('objective').classList.remove('hidden');
+  document.getElementById('tutorial').classList.remove('hidden');
+
+  // spawn into outside
+  const s = scenes.outside;
+  player.x = s.spawn.x; player.y = s.spawn.y;
+  applyCanvasSize();
+  fitCanvas();
+  refreshObjective();
+  requestAnimationFrame(loop);
+})();
+
+</script>
+</body>
+</html>
