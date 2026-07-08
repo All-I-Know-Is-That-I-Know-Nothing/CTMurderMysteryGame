@@ -220,7 +220,6 @@ button.danger{background:var(--verm); color:var(--paper);}
 .study-box input{background:var(--paper); color:var(--ink); border:2px solid var(--plum); font-family:inherit; font-size:14px; padding:5px 8px; width:150px; text-transform:uppercase;}
 .study-box textarea{width:100%; height:64px; margin:6px 0; background:#12101a; color:var(--amber); border:2px solid var(--plum); font-family:monospace; font-size:11px; padding:8px; resize:vertical; word-break:break-all;}
 .study-box button{font-family:inherit;}
-.study-box #studyMsg{font-size:12px; color:var(--amber);}
 
 /* modal (lab results, lookups) */
 #modal{
@@ -1185,11 +1184,12 @@ addEventListener("resize", fitStage);
    (DDLC), Undertale-style blips, silence on choices, eerie auditorium
    layer (Until Dawn), campus murmur ambience, satisfying UI clicks,
    previously-unheard sting at the endings (RDR). */
-window.ASSETS_AUDIO = {"correct":"audio/End_of_Game_Correct_Answer.mp3","wrong":"audio/End_of_Game_Wrong_Answer.mp3","credits":"audio/Credits_Music.mp3","music_rooms":"audio/All_Rooms_Music_except_Auditorium.mp3","music_auditorium":"audio/Auditorium_Music.mp3","sfx_click":"audio/Click_Button_Sound.mp3","sfx_walk":"audio/Walking_Sound.mp3","sfx_clue":"audio/Found_a_Clue_Sound.mp3","sfx_pickup":"audio/Pick_Up_Item_Sound.mp3"};
+window.ASSETS_AUDIO = {"correct":"audio/End_of_Game_Correct_Answer.mp3","wrong":"audio/End_of_Game_Wrong_Answer.mp3","credits":"audio/Credits_Music.mp3","music_rooms":"audio/Main_background_Music.mp3","music_auditorium":"audio/Auditorium_Music.mp3","sfx_click":"audio/Click_Button_Sound.mp3","sfx_walk":"audio/Walking_Sound.mp3","sfx_clue":"audio/Found_a_Clue_Sound.mp3","sfx_pickup":"audio/Pick_Up_Item_Sound.mp3"};
 const AUD = (()=>{
   const supported = typeof (window.AudioContext||window.webkitAudioContext) !== "undefined";
-  let C=null, master, musG, padG, droneG, ambG, ambPan;
-  let mode="theme", day=1, scene="outside", muted=false;
+  let C=null, master, musicBus, sfxBus, musG, padG, droneG, ambG, ambPan;
+  let mode="theme", day=1, scene="outside", muted=false, musicOff=false;
+  const MUSIC_LEVEL = 0.6; // music bus sits lower than sound effects
   let nextT=0, stepI=0, nightQ=false, ducked=false, lastSwell=0, lastFoot=0, resolved=false;
 
   const N = {A1:55,E2:82.4,G1:49,A2:110,C3:130.8,E3:164.8,G3:196,A3:220,B3:246.9,C4:261.6,D4:293.7,E4:329.6,G4:392,A4:440,E5:659.3};
@@ -1216,8 +1216,11 @@ const AUD = (()=>{
   function init(){
     if(C || !supported) return;
     C = new (window.AudioContext||window.webkitAudioContext)();
-    master = C.createGain(); master.gain.value = muted?0:0.9; master.connect(C.destination);
-    musG = C.createGain(); musG.gain.value=1; musG.connect(master);
+    master = C.createGain(); master.gain.value = 0.9; master.connect(C.destination);
+    // two buses off master: music (togglable on its own) and sound effects
+    musicBus = C.createGain(); musicBus.gain.value = musicOff?0:MUSIC_LEVEL; musicBus.connect(master);
+    sfxBus   = C.createGain(); sfxBus.gain.value = 1; sfxBus.connect(master);
+    musG = C.createGain(); musG.gain.value=1; musG.connect(musicBus);
     padG = C.createGain(); padG.gain.value=0; padG.connect(musG);
     [55, 55*Math.pow(2,4/1200)].forEach(f=>{
       const o=C.createOscillator(); o.type="sawtooth"; o.frequency.value=f;
@@ -1225,11 +1228,11 @@ const AUD = (()=>{
       o.connect(lp); lp.connect(padG); o.start();
     });
     padG.gain.setTargetAtTime(0.045, C.currentTime, 3);
-    droneG = C.createGain(); droneG.gain.value=0; droneG.connect(master);
+    droneG = C.createGain(); droneG.gain.value=0; droneG.connect(musicBus);
     [54.5,55.45].forEach(f=>{ const o=C.createOscillator(); o.frequency.value=f; o.connect(droneG); o.start(); });
     const hum=C.createOscillator(); hum.type="triangle"; hum.frequency.value=100;
     const humG=C.createGain(); humG.gain.value=0.2; hum.connect(humG); humG.connect(droneG); hum.start();
-    ambG = C.createGain(); ambG.gain.value=0; ambG.connect(master);
+    ambG = C.createGain(); ambG.gain.value=0; ambG.connect(musicBus);
     const ns=C.createBufferSource(); ns.buffer=noiseBuf(2.4); ns.loop=true;
     const lp=C.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=420;
     ns.connect(lp); lp.connect(ambG); ns.start();
@@ -1255,7 +1258,7 @@ const AUD = (()=>{
     o.connect(lp); lp.connect(e); e.connect(musG);
     o.start(t); o.stop(t+dur+0.05);
   }
-  function bell(f, t, dur, g){
+  function bell(f, t, dur, g, dest){
     const c=C.createOscillator(); c.frequency.value=f;
     const m=C.createOscillator(); m.frequency.value=f*2.01;
     const mg=C.createGain(); mg.gain.setValueAtTime(f*1.4, t);
@@ -1264,15 +1267,15 @@ const AUD = (()=>{
     const e=C.createGain(); e.gain.setValueAtTime(0.0001, t);
     e.gain.exponentialRampToValueAtTime(g, t+0.02);
     e.gain.exponentialRampToValueAtTime(0.0001, t+dur);
-    c.connect(e); e.connect(master);
+    c.connect(e); e.connect(dest||sfxBus);
     c.start(t); m.start(t); c.stop(t+dur+0.1); m.stop(t+dur+0.1);
   }
-  function noiseHit(t, dur, hz, q, g, hp){
+  function noiseHit(t, dur, hz, q, g, hp, dest){
     const s=C.createBufferSource(); s.buffer=noiseBuf(Math.max(0.1,dur));
     const f=C.createBiquadFilter(); f.type= hp?"highpass":"bandpass"; f.frequency.value=hz; f.Q.value=q||1;
     const e=C.createGain(); e.gain.setValueAtTime(g, t);
     e.gain.exponentialRampToValueAtTime(0.0001, t+dur);
-    s.connect(f); f.connect(e); e.connect(master);
+    s.connect(f); f.connect(e); e.connect(dest||sfxBus);
     s.start(t); s.stop(t+dur+0.02);
   }
 
@@ -1289,11 +1292,11 @@ const AUD = (()=>{
       e.gain.linearRampToValueAtTime(0.0001, now+3.4);
       const s=C.createBufferSource(); s.buffer=noiseBuf(3.5);
       const f=C.createBiquadFilter(); f.type="bandpass"; f.frequency.value=320; f.Q.value=6;
-      s.connect(f); f.connect(e); e.connect(master); s.start(now); s.stop(now+3.6);
+      s.connect(f); f.connect(e); e.connect(musicBus); s.start(now); s.stop(now+3.6);
     }
     // distant-footstep ambience on campus
     if((scene==="outside"||scene==="forum") && now-lastFoot > 0.9+Math.random()*2.2){
-      lastFoot = now; noiseHit(now, 0.06, 260+Math.random()*200, 2, 0.012);
+      lastFoot = now; noiseHit(now, 0.06, 260+Math.random()*200, 2, 0.012, false, musicBus);
     }
     while(nextT < now + 0.3){
       scheduleStep(stepI, nextT);
@@ -1330,7 +1333,7 @@ const AUD = (()=>{
     music(m){ mode=m; if(!C) return;
       if(m==="resolve" && !resolved){
         resolved=true; const t=C.currentTime+0.3;
-        [[N.A3,0],[N.E4,0.7],[N.A4,1.4],[N.C4,2.3]].forEach(([f,d])=> bell(f, t+d, 2.4, 0.05));
+        [[N.A3,0],[N.E4,0.7],[N.A4,1.4],[N.C4,2.3]].forEach(([f,d])=> bell(f, t+d, 2.4, 0.05, musicBus));
         setTimeout(()=>{ mode="quiet"; }, 3600);
       }
       if(m==="theme") resolved=false;
@@ -1338,15 +1341,15 @@ const AUD = (()=>{
     night(on){ nightQ=on; if(C && !ducked) musG.gain.setTargetAtTime(on?0.45:1, C.currentTime, 0.6); },
     duck(on){ ducked=on; if(C) musG.gain.setTargetAtTime(on?0.10:(nightQ?0.45:1), C.currentTime, on?0.12:0.4); },
     sting(good){ if(!C) return; const t=C.currentTime;
-      if(good){ [[N.A2,0],[N.E3,0.5],[N.C4,1.0],[N.E4,1.5]].forEach(([f,d])=> bell(f,t+d,2.6,0.06)); }
-      else { [[N.A2,0],[N.A2*Math.pow(2,-1/12),0.8]].forEach(([f,d])=> bell(f,t+d,3.0,0.07)); }
+      if(good){ [[N.A2,0],[N.E3,0.5],[N.C4,1.0],[N.E4,1.5]].forEach(([f,d])=> bell(f,t+d,2.6,0.06,musicBus)); }
+      else { [[N.A2,0],[N.A2*Math.pow(2,-1/12),0.8]].forEach(([f,d])=> bell(f,t+d,3.0,0.07,musicBus)); }
     },
     blip(p){ if(!C) return; const t=C.currentTime;
       const o=C.createOscillator(); o.type="triangle";
       o.frequency.value = p*(0.96+Math.random()*0.08);
       const e=C.createGain(); e.gain.setValueAtTime(0.011, t);
       e.gain.exponentialRampToValueAtTime(0.0001, t+0.05);
-      o.connect(e); e.connect(master); o.start(t); o.stop(t+0.06);
+      o.connect(e); e.connect(sfxBus); o.start(t); o.stop(t+0.06);
     },
     foot(){ if(!C) return; noiseHit(C.currentTime, 0.05, 340+Math.random()*120, 2, 0.030); },
     paper(){ if(!C) return; const t=C.currentTime;
@@ -1367,7 +1370,7 @@ const AUD = (()=>{
       try{
         const m=C.createMediaElementSource(el);
         const g=C.createGain(); g.gain.value=muted?0:vol;
-        m.connect(g); g.connect(master);
+        m.connect(g); g.connect(sfxBus);
       }catch(e){ el.volume=muted?0:vol; }
       const p=el.play(); if(p&&p.catch) p.catch(()=>{});
     },
@@ -1380,7 +1383,7 @@ const AUD = (()=>{
         const src=(window.ASSETS_AUDIO||{}).sfx_walk; if(!src) return;
         const el=new Audio(); el.src=src; el.loop=true;
         let g;
-        try{ const m=C.createMediaElementSource(el); g=C.createGain(); g.gain.value=0; m.connect(g); g.connect(master); }
+        try{ const m=C.createMediaElementSource(el); g=C.createGain(); g.gain.value=0; m.connect(g); g.connect(sfxBus); }
         catch(e){ g=null; el.volume=0; }
         this._walk={el,g};
       }
@@ -1401,7 +1404,7 @@ const AUD = (()=>{
       const src=(window.ASSETS_AUDIO||{})[key]; if(!src) return null;
       const el=new Audio(); el.src=src; el.loop=true; el.preload="auto";
       let g,media;
-      try{ media=C.createMediaElementSource(el); g=C.createGain(); g.gain.value=0; media.connect(g); g.connect(master); }
+      try{ media=C.createMediaElementSource(el); g=C.createGain(); g.gain.value=0; media.connect(g); g.connect(musicBus); }
       catch(e){ g=null; }
       return (B.node[key]={el,g});
     },
@@ -1412,8 +1415,8 @@ const AUD = (()=>{
       const prev=B.cur; const t=C.currentTime, dur=Math.max(0.01,ms/1000);
       mode="quiet"; // silence synth theme
       const p=nxt.el.play(); if(p&&p.catch) p.catch(()=>{});
-      if(nxt.g){ nxt.g.gain.cancelScheduledValues(t); nxt.g.gain.setValueAtTime(Math.max(0.0001,nxt.g.gain.value),t); nxt.g.gain.linearRampToValueAtTime(muted?0:vol,t+dur); }
-      else { nxt.el.volume=muted?0:vol; }
+      if(nxt.g){ nxt.g.gain.cancelScheduledValues(t); nxt.g.gain.setValueAtTime(Math.max(0.0001,nxt.g.gain.value),t); nxt.g.gain.linearRampToValueAtTime(vol,t+dur); }
+      else { nxt.el.volume=vol; }
       if(prev && prev!==nxt){
         if(prev.g){ prev.g.gain.cancelScheduledValues(t); prev.g.gain.setValueAtTime(Math.max(0.0001,prev.g.gain.value),t); prev.g.gain.linearRampToValueAtTime(0.0001,t+dur); setTimeout(()=>{ try{ prev.el.pause(); }catch(e){} },ms+80); }
         else { try{ prev.el.pause(); }catch(e){} }
@@ -1440,7 +1443,7 @@ const AUD = (()=>{
       try { media=C.createMediaElementSource(el); }
       catch(e){ return null; }
       const g=C.createGain(); g.gain.value=0;
-      media.connect(g); g.connect(master);
+      media.connect(g); g.connect(musicBus);
       return (A.node[key]={el,g});
     },
     filePlay(key,{loop=false,fadeIn=1200}={}){
@@ -1452,7 +1455,7 @@ const AUD = (()=>{
       const p=n.el.play(); if(p&&p.catch) p.catch(()=>{});
       n.g.gain.cancelScheduledValues(t);
       n.g.gain.setValueAtTime(0.0001,t);
-      n.g.gain.linearRampToValueAtTime(muted?0:0.9, t+Math.max(0.01,fadeIn/1000));
+      n.g.gain.linearRampToValueAtTime(0.9, t+Math.max(0.01,fadeIn/1000));
       A.cur=n; A.curKey=key;
     },
     fileCrossfade(key,{loop=true,ms=1600}={}){
@@ -1463,7 +1466,7 @@ const AUD = (()=>{
       const p=nxt.el.play(); if(p&&p.catch) p.catch(()=>{});
       nxt.g.gain.cancelScheduledValues(t);
       nxt.g.gain.setValueAtTime(Math.max(0.0001,nxt.g.gain.value),t);
-      nxt.g.gain.linearRampToValueAtTime(muted?0:0.9, t+dur);
+      nxt.g.gain.linearRampToValueAtTime(0.9, t+dur);
       if(prev&&prev!==nxt){
         prev.g.gain.cancelScheduledValues(t);
         prev.g.gain.setValueAtTime(Math.max(0.0001,prev.g.gain.value),t);
@@ -1481,7 +1484,8 @@ const AUD = (()=>{
       setTimeout(()=>{ try{ n.el.pause(); }catch(e){} }, ms+80);
       A.cur=null; A.curKey=null;
     },
-    toggleMute(){ muted=!muted; if(C) master.gain.setTargetAtTime(muted?0:0.9, C.currentTime, 0.1); return muted; },
+    toggleMute(){ muted=!muted; if(C&&sfxBus) sfxBus.gain.setTargetAtTime(muted?0:1, C.currentTime, 0.1); return muted; },
+    toggleMusic(){ musicOff=!musicOff; if(C&&musicBus) musicBus.gain.setTargetAtTime(musicOff?0:MUSIC_LEVEL, C.currentTime, 0.2); return musicOff; },
   };
 })();
 
@@ -1677,7 +1681,7 @@ function gotoScene(to, spawn){
 }
 
 function step(){
-  if(S.mode !== "world"){ wasMoving = false; return; }
+  if(S.mode !== "world"){ if(wasMoving) AUD.walkOff(); wasMoving = false; return; }
   let dx=0, dy=0;
   if(KEYS.ArrowUp||KEYS.w) dy=-1; if(KEYS.ArrowDown||KEYS.s) dy=1;
   if(KEYS.ArrowLeft||KEYS.a) dx=-1; if(KEYS.ArrowRight||KEYS.d) dx=1;
@@ -1686,7 +1690,7 @@ function step(){
     const sp = 2.3, nx = S.px + dx*sp, ny = S.py + dy*sp;
     S.dir = dy<0?"n":dy>0?"s":dx<0?"w":"e";
     const door = doorAt(nx,ny);
-    if(door){ wasMoving=false; gotoScene(door.to, door.spawn); return; }
+    if(door){ if(wasMoving) AUD.walkOff(); wasMoving=false; gotoScene(door.to, door.spawn); return; }
     const ox = S.px, oy = S.py;
     if(!blockedAt(nx, S.py) && !playerEntBlocked(nx, S.py)) S.px = nx;
     if(!blockedAt(S.px, ny) && !playerEntBlocked(S.px, ny)) S.py = ny;
@@ -2527,41 +2531,15 @@ function showCredits(){
 
 /* ---------- research export (study mode only; no backend) ----------
    Appears at the end of the case review ONLY when the game is opened with
-   ?study=1. Produces a compact, copy-able string keyed to the participant's
-   linking code, which they paste into the final questionnaire field. No data
-   leaves the browser automatically; nothing personal is stored by the game. */
+   ?study=1. Offers the participant a downloadable plain-text session file
+   (buildSessionLog), which they upload to Questionnaire 2. No data leaves the
+   browser automatically; nothing is transmitted or stored by the game. */
 const STUDY_MODE = /[?&]study=1\b/.test(location.search);
 function linkShape(a,b){
   const ca = CLUES[a] && CLUES[a].cat, cb = CLUES[b] && CLUES[b].cat;
   if(ca==="motive"   && cb==="motive")   return "MM";
   if(ca==="timeline" && cb==="timeline") return "TT";
   return "XX";
-}
-function buildResearchCode(code){
-  const ex = id => (S.clues[id] && S.clues[id].examined) || 0;
-  const clueVals = Object.values(S.clues);
-  const coll = clueVals.filter(c=> c.collected).length;
-  const exam = clueVals.filter(c=> c.examined).length;
-  const linkMM = S.links.filter(l=> linkShape(l.a,l.b)==="MM").length;
-  const linkTT = S.links.filter(l=> linkShape(l.a,l.b)==="TT").length;
-  const skipped = SKIPPABLE.filter(id=> !S.visits[id]);
-  const sawSkip = SKIPPABLE.filter(id=> S.visits[id]);
-  const clean = (code||"NONE").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,12) || "NONE";
-  const fields = [
-    "v1",
-    "code=" + clean,
-    "end=" + (S.ending || "none"),
-    "acc=" + (S.accused || "none"),
-    "reopen=" + (S.reopened ? 1 : 0),
-    "day=" + S.day,
-    "rf=" + S.rf,
-    "toxExam=" + ex("tox_timeline"),
-    "clues=" + coll + "/" + exam,
-    "links=" + S.links.length + "(MM" + linkMM + ",TT" + linkTT + ")",
-    "skipNPC=" + (skipped.length ? skipped.join("+") : "none"),
-    "sawNPC=" + (sawSkip.length ? sawSkip.join("+") : "none"),
-  ];
-  return "CASE2606|" + fields.join("|");
 }
 
 /* ---------- human-readable session log (study mode only; download) ----------
@@ -2691,7 +2669,66 @@ function buildSessionLog(code){
   if(!anyJournal) line("  (no journal entries written)");
   line("");
   rule();
-  line("End of session log.");
+  line("End of readable log.");
+  rule();
+
+  // structured block for later automated parsing. The prose above is the pilot
+  // deliverable; this is the same trail as data, so a script can lift it without
+  // re-running anything. Everything between the fences is one JSON object.
+  const data = {
+    schema: "case2606.session/v1",
+    code: clean,
+    generated: now.toISOString(),
+    day_reached: S.day,
+    accused: S.accused || null,
+    ending: S.ending || null,
+    reopened: !!S.reopened,
+    rf: S.rf,
+    clues: Object.keys(CLUES).reduce((o,id)=>{
+      const st = S.clues[id];
+      o[id] = {
+        cat: CLUES[id].cat,
+        collected_day: (st && st.collected) || 0,
+        examined_day: (st && st.examined) || 0,
+      };
+      return o;
+    }, {}),
+    links: S.links.map(l=> ({
+      a: l.a, b: l.b, day: l.day,
+      shape: linkShape(l.a, l.b),
+      note: (l.note || "").trim(),
+    })),
+    link_totals: {
+      total: S.links.length,
+      MM: S.links.filter(l=> linkShape(l.a,l.b)==="MM").length,
+      TT: S.links.filter(l=> linkShape(l.a,l.b)==="TT").length,
+      other: S.links.filter(l=> linkShape(l.a,l.b)==="XX").length,
+    },
+    visits: Object.keys(NPCS).reduce((o,id)=>{
+      o[id] = (S.visits[id] || []).slice().sort((a,b)=>a-b);
+      return o;
+    }, {}),
+    skippable: SKIPPABLE.slice(),
+    source_checks: {
+      attendance_examined: !!(S.clues.bestie_attendance_false && S.clues.bestie_attendance_false.examined),
+      attendance_shown_false: !!V("attendance_flipped"),
+      hos_claim_accepted: !!(V("hos_penalised") && !V("attendance_system_doubt") && !ex("frank_tapin")),
+      attendance_system_questioned: !!V("attendance_system_doubt"),
+      tox_timeline_examined_day: (S.clues.tox_timeline && S.clues.tox_timeline.examined) || 0,
+    },
+    journal: (()=>{
+      const j = {};
+      for(let d=1; d<=5; d++){ if(S.journal[d] && S.journal[d].trim()) j[d] = S.journal[d].trim(); }
+      return j;
+    })(),
+  };
+  line("STRUCTURED DATA (for analysis; ignore if reading by eye)");
+  line("---BEGIN CASE2606 JSON---");
+  line(JSON.stringify(data));
+  line("---END CASE2606 JSON---");
+  line("");
+  rule();
+  line("End of session file.");
   rule();
 
   return L.join(NL);
@@ -2700,43 +2737,23 @@ function renderResearchExport(R){
   const box = document.createElement("div");
   box.className = "study-box";
   box.innerHTML =
-    "<h3>Research session - final step</h3>"
-    + "<p>Enter the personal code you used on the questionnaires, then press Generate. "
-    + "Copy the line that appears and paste it into the last question of Questionnaire 2.</p>"
+    "<h3>Before you finish - one required step</h3>"
+    + "<p><b>Your answers are only complete once you upload your session file.</b> "
+    + "This file is how your play reaches the research team.</p>"
+    + "<p>1. Enter the personal code you used on the questionnaires.<br>"
+    + "2. Press <b>Download session file</b> below.<br>"
+    + "3. Go to Questionnaire 2 and <b>upload the downloaded file</b> at the file-upload question.</p>"
     + "<div class='study-row'><label>Your personal code: </label>"
     + "<input id='studyCode' type='text' maxlength='12' autocomplete='off' placeholder='e.g. AN0743'></div>"
-    + "<div class='study-row'><button id='studyGen'>GENERATE MY CODE</button></div>"
-    + "<textarea id='studyOut' readonly placeholder='(your code will appear here)'></textarea>"
-    + "<div class='study-row'><button id='studyCopy' disabled>COPY</button>"
-    + "<span id='studyMsg'></span></div>"
-    + "<div class='study-row' style='margin-top:14px; border-top:1px solid var(--plum); padding-top:12px;'>"
-    + "<label style='flex-basis:100%'>Researcher only - full readable session log (plain text):</label></div>"
-    + "<div class='study-row'><button id='studyLog'>DOWNLOAD SESSION LOG</button>"
-    + "<span id='studyLogMsg'></span></div>";
+    + "<div class='study-row'><button id='studyLog'>DOWNLOAD SESSION FILE</button>"
+    + "<span id='studyLogMsg'></span></div>"
+    + "<p id='studyDone' style='display:none; color:var(--amber); font-weight:bold; margin-top:10px;'>"
+    + "Downloaded. Now upload this file to the file-upload question in Questionnaire 2. "
+    + "You can close the game once you have uploaded it.</p>";
   R.appendChild(box);
-  $("studyGen").onclick = ()=>{
-    const code = $("studyCode").value.trim();
-    if(!code){ $("studyMsg").textContent = "Please enter your code first."; return; }
-    const out = buildResearchCode(code);
-    $("studyOut").value = out;
-    $("studyCopy").disabled = false;
-    $("studyMsg").textContent = "";
-  };
-  $("studyCopy").onclick = ()=>{
-    const ta = $("studyOut");
-    if(!ta.value) return;
-    ta.select();
-    try{
-      if(navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(ta.value);
-      } else { document.execCommand("copy"); }
-      $("studyMsg").textContent = "Copied. Paste it into the questionnaire.";
-    }catch(e){
-      $("studyMsg").textContent = "Select the text and copy it manually (Ctrl/Cmd+C).";
-    }
-  };
   $("studyLog").onclick = ()=>{
     const code = ($("studyCode").value || "").trim();
+    if(!code){ $("studyLogMsg").textContent = "Please enter your personal code first."; return; }
     const text = buildSessionLog(code);
     const clean = code.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,12) || "nocode";
     const fname = "CASE2606_session_" + clean + ".txt";
@@ -2749,8 +2766,9 @@ function renderResearchExport(R){
       document.body.removeChild(a);
       setTimeout(()=> URL.revokeObjectURL(url), 1000);
       $("studyLogMsg").textContent = "Saved: " + fname;
+      $("studyDone").style.display = "block";
     }catch(e){
-      $("studyLogMsg").textContent = "Download failed - check browser download settings.";
+      $("studyLogMsg").textContent = "Download failed - check your browser's download settings and try again.";
     }
   };
 }
@@ -2811,11 +2829,15 @@ document.addEventListener("click", e=>{
   if(e.target.tagName === "BUTTON" && !e.target.classList.contains("opt")) AUD.sfx("sfx_click",{vol:0.8});
 }, true);
 addEventListener("keydown", ()=> AUD.resume());
-// mute toggle in HUD
-{ const mb = document.createElement("button");
-  mb.id = "btnMute"; mb.textContent = "SOUND: ON";
-  mb.onclick = ()=>{ mb.textContent = AUD.toggleMute() ? "SOUND: OFF" : "SOUND: ON"; };
-  const dorm = $("btnDorm");
+// music + sound-effect toggles in HUD (independent)
+{ const dorm = $("btnDorm");
+  const muB = document.createElement("button");
+  muB.id = "btnMusic"; muB.textContent = "MUSIC: ON";
+  muB.onclick = ()=>{ muB.textContent = AUD.toggleMusic() ? "MUSIC: OFF" : "MUSIC: ON"; };
+  const mb = document.createElement("button");
+  mb.id = "btnMute"; mb.textContent = "SFX: ON";
+  mb.onclick = ()=>{ mb.textContent = AUD.toggleMute() ? "SFX: OFF" : "SFX: ON"; };
+  dorm.parentNode.insertBefore(muB, dorm);
   dorm.parentNode.insertBefore(mb, dorm);
 }
 
