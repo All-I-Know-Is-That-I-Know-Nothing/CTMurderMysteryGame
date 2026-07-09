@@ -2235,11 +2235,10 @@ function toggleLink(id){
   const a = linkFrom, b = id; linkFrom = null;
   if(S.links.some(l=> (l.a===a&&l.b===b)||(l.a===b&&l.b===a))){ renderBoard(); return; }
   AUD.pin();
-  // Link completes IMMEDIATELY - no blocking dialog. Note is optional and added after.
+  // Link completes immediately. No note step - the link itself is the record.
   S.links.push({a, b, day:S.day, note:""});
   linkRF(a, b, +1);
   renderBoard();
-  editLinkNote(a, b);   // non-blocking in-DOM post-it editor, focused on this thread
 }
 function findLink(a, b){
   return S.links.find(l=> (l.a===a&&l.b===b)||(l.a===b&&l.b===a));
@@ -2280,47 +2279,66 @@ function editLinkNote(a, b){
 }
 function drawLinks(cardEls){
   const svg = $("boardSVG");
-  const wr = $("boardWrap").getBoundingClientRect();
-  svg.setAttribute("width", wr.width); svg.setAttribute("height", wr.height);
+  const wrap = $("boardWrap");
+  // Size the SVG to the full scrollable content, not just the visible box.
+  const W = wrap.clientWidth, H = wrap.scrollHeight || wrap.clientHeight;
+  svg.setAttribute("width", W); svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", "0 0 "+W+" "+H);
   svg.innerHTML = "";
   const SVGNS = "http://www.w3.org/2000/svg";
+  // Layout-relative rect for a card, measured against #boardWrap. offsetLeft/Top
+  // are independent of scroll, so links can't drift when the board is scrolled.
+  function rectOf(el){
+    let x = 0, y = 0, n = el;
+    while(n && n !== wrap){ x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+    return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+  }
   S.links.forEach((l, idx)=>{
     const ea = cardEls[l.a], eb = cardEls[l.b];
     if(!ea || !eb) return;
-    const ra = ea.getBoundingClientRect(), rb = eb.getBoundingClientRect();
-    const x1 = ra.left - wr.left + ra.width/2, y1 = ra.top - wr.top + ra.height/2;
-    const x2 = rb.left - wr.left + rb.width/2, y2 = rb.top - wr.top + rb.height/2;
+    const ra = rectOf(ea), rb = rectOf(eb);
     const ca = CLUES[l.a].cat, cb = CLUES[l.b].cat;
     const isTL = ca==="timeline" && cb==="timeline";
     const isMO = ca==="motive"   && cb==="motive";
     const col = isTL ? "#ECA72C" : isMO ? "#EE5622" : "#EFE9DC";
 
-    // Curve the read-line so parallel/crossing links stay legible instead of
-    // collapsing into one straight blur. Bow perpendicular to the line, sign
-    // alternating per link so neighbours arc apart.
+    // Anchor each end on the card edge that faces the other card, so the line
+    // visibly touches both cards instead of floating from their centres.
+    const ca_cx = ra.x + ra.w/2, ca_cy = ra.y + ra.h/2;
+    const cb_cx = rb.x + rb.w/2, cb_cy = rb.y + rb.h/2;
+    function edge(r, cx, cy, tx, ty){
+      // point where the line from card centre toward (tx,ty) meets the card's edge
+      const dx = tx - cx, dy = ty - cy;
+      if(dx === 0 && dy === 0) return [cx, cy];
+      const sx = dx !== 0 ? (r.w/2) / Math.abs(dx) : Infinity;
+      const sy = dy !== 0 ? (r.h/2) / Math.abs(dy) : Infinity;
+      const s = Math.min(sx, sy);
+      return [cx + dx*s, cy + dy*s];
+    }
+    const [x1, y1] = edge(ra, ca_cx, ca_cy, cb_cx, cb_cy);
+    const [x2, y2] = edge(rb, cb_cx, cb_cy, ca_cx, ca_cy);
+
     const mx = (x1+x2)/2, my = (y1+y2)/2;
     const dx = x2-x1, dy = y2-y1, len = Math.hypot(dx,dy) || 1;
-    const nx = -dy/len, ny = dx/len;            // unit normal
-    const bow = (idx % 2 ? 1 : -1) * Math.min(46, 18 + len*0.10);
-    const cxp = mx + nx*bow, cyp = my + ny*bow; // control point
-    const lx = mx + nx*bow*0.62, ly = my + ny*bow*0.62; // label sits on the arc
-
-    // soft dark underlay for contrast against any card colour, then the read-line
-    const under = document.createElementNS(SVGNS,"path");
+    const nx = -dy/len, ny = dx/len;                 // unit normal
+    const bow = (idx % 2 ? 1 : -1) * Math.min(40, 14 + len*0.08);
+    const cxp = mx + nx*bow, cyp = my + ny*bow;      // curve control point
     const dPath = "M "+x1+" "+y1+" Q "+cxp+" "+cyp+" "+x2+" "+y2;
-    under.setAttribute("d", dPath);
-    under.setAttribute("fill","none"); under.setAttribute("stroke","#221E22");
-    under.setAttribute("stroke-width","6"); under.setAttribute("stroke-linecap","round");
-    under.setAttribute("opacity","0.55");
+
+    // dark underlay for contrast, then the coloured read-line
+    const under = document.createElementNS(SVGNS,"path");
+    under.setAttribute("d", dPath); under.setAttribute("fill","none");
+    under.setAttribute("stroke","#221E22"); under.setAttribute("stroke-width","6");
+    under.setAttribute("stroke-linecap","round"); under.setAttribute("opacity","0.55");
     svg.appendChild(under);
 
     const ln = document.createElementNS(SVGNS,"path");
-    ln.setAttribute("d", dPath);
-    ln.setAttribute("fill","none"); ln.setAttribute("stroke",col);
-    ln.setAttribute("stroke-width","3.5"); ln.setAttribute("stroke-linecap","round");
+    ln.setAttribute("d", dPath); ln.setAttribute("fill","none");
+    ln.setAttribute("stroke",col); ln.setAttribute("stroke-width","3.5");
+    ln.setAttribute("stroke-linecap","round");
     svg.appendChild(ln);
 
-    // endpoint pins so it's unambiguous which two cards the line joins
+    // endpoint pins sitting ON each card edge
     [[x1,y1],[x2,y2]].forEach(p=>{
       const c = document.createElementNS(SVGNS,"circle");
       c.setAttribute("cx",p[0]); c.setAttribute("cy",p[1]); c.setAttribute("r","5");
@@ -2328,29 +2346,16 @@ function drawLinks(cardEls){
       svg.appendChild(c);
     });
 
-    // label chip: names WHAT is linked, so the board reads without tracing ends
-    const na = CLUES[l.a].n, nb = CLUES[l.b].n;
-    const chipW = 150, chipH = l.note ? 46 : 30;
-    const fo = document.createElementNS(SVGNS,"foreignObject");
-    fo.setAttribute("x", Math.max(2, Math.min(wr.width-chipW-2, lx - chipW/2)));
-    fo.setAttribute("y", Math.max(2, ly - chipH/2));
-    fo.setAttribute("width", chipW); fo.setAttribute("height", chipH);
-    fo.style.pointerEvents = "auto";
-    const esc = s=> s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
-    const cls = "linklabel" + (isTL?" tl":isMO?" mo":"");
-    const noteHtml = l.note ? "<span class='noted'>“"+esc(l.note).slice(0,60)+"”</span>" : "";
-    fo.innerHTML = "<div xmlns='http://www.w3.org/1999/xhtml' class='"+cls
-      +"' title='Edit this connection'>"+esc(na)+" ↔ "+esc(nb)+noteHtml+"</div>";
-    fo.onclick = ()=> editLinkNote(l.a, l.b);
-    svg.appendChild(fo);
-
-    // delete control, tucked at the label's corner
+    // delete control at the arc's midpoint (no note, no label)
+    const bx = mx + nx*bow*0.5, by = my + ny*bow*0.5;
     const del = document.createElementNS(SVGNS,"foreignObject");
-    del.setAttribute("x", Math.min(wr.width-22, lx + chipW/2 - 8));
-    del.setAttribute("y", ly - chipH/2 - 8);
-    del.setAttribute("width",20); del.setAttribute("height",20);
+    del.setAttribute("x", bx-11); del.setAttribute("y", by-11);
+    del.setAttribute("width",22); del.setAttribute("height",22);
     del.style.pointerEvents = "auto";
-    del.innerHTML = "<div xmlns='http://www.w3.org/1999/xhtml' title='Remove this link' style='width:20px;height:20px;line-height:17px;text-align:center;font-size:13px;font-weight:bold;background:#EE5622;color:#fff;border:2px solid #221E22;border-radius:50%;cursor:pointer;'>×</div>";
+    del.innerHTML = "<div xmlns='http://www.w3.org/1999/xhtml' title='Remove this link "
+      + "("+CLUES[l.a].n+" ↔ "+CLUES[l.b].n+")' style='width:22px;height:22px;line-height:19px;"
+      + "text-align:center;font-size:13px;font-weight:bold;background:#EE5622;color:#fff;"
+      + "border:2px solid #221E22;border-radius:50%;cursor:pointer;'>×</div>";
     del.onclick = ()=> deleteLink(l.a, l.b);
     svg.appendChild(del);
   });
@@ -2625,7 +2630,7 @@ function showCredits(){
 
 /* ---------- research export (study mode only; no backend) ----------
    Appears at the end of the case review ONLY when the game is opened with
-   ?study=1. Offers the participant a downloadable plain-text session file
+   ?study=1. Offers the participant a downloadable Word (.docx) session file
    (buildSessionLog), which they upload to Questionnaire 2. No data leaves the
    browser automatically; nothing is transmitted or stored by the game. */
 const STUDY_MODE = /[?&]study=1\b/.test(location.search);
@@ -2635,6 +2640,81 @@ function linkShape(a,b){
   if(ca==="timeline" && cb==="timeline") return "TT";
   return "XX";
 }
+
+/* ---------- minimal .docx writer (no dependencies) ----------
+   MS Forms' file-upload question rejects .txt but accepts Word. A .docx is a
+   ZIP of a few XML parts; we build a genuine one in-browser (store-only ZIP,
+   real CRC32) so it opens in Word and passes Forms' type check. The session
+   text is emitted one paragraph per line in a monospace font, so the ASCII
+   rules and the machine-readable JSON block survive intact and copyable.
+   Nothing is transmitted; this runs entirely on the participant's device. */
+const CASE_DOCX = (()=>{
+  const enc = new TextEncoder();
+  // CRC32 (standard IEEE table), needed for valid ZIP entries.
+  const CRC = (()=>{
+    const t = new Uint32Array(256);
+    for(let n=0; n<256; n++){ let c=n; for(let k=0;k<8;k++) c = (c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c>>>0; }
+    return bytes=>{ let c=0xFFFFFFFF; for(let i=0;i<bytes.length;i++) c=(c>>>8)^t[(c^bytes[i])&0xFF]; return (c^0xFFFFFFFF)>>>0; };
+  })();
+  function xmlEsc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  // Build the store-only ZIP from [{name, bytes}] parts.
+  function zip(parts){
+    const files = parts.map(p=>({ name:p.name, data:enc.encode(p.text) }));
+    const chunks = []; const central = []; let offset = 0;
+    const u16 = n => [n&0xFF, (n>>>8)&0xFF];
+    const u32 = n => [n&0xFF,(n>>>8)&0xFF,(n>>>16)&0xFF,(n>>>24)&0xFF];
+    files.forEach(f=>{
+      const nameB = enc.encode(f.name);
+      const crc = CRC(f.data), sz = f.data.length;
+      const local = [].concat(u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0),
+        u32(crc), u32(sz), u32(sz), u16(nameB.length), u16(0));
+      chunks.push(new Uint8Array(local)); chunks.push(nameB); chunks.push(f.data);
+      const cen = [].concat(u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+        u32(crc), u32(sz), u32(sz), u16(nameB.length), u16(0), u16(0), u16(0), u16(0),
+        u32(0), u32(offset));
+      central.push(new Uint8Array(cen)); central.push(nameB);
+      offset += local.length + nameB.length + sz;
+    });
+    const cenStart = offset;
+    let cenLen = 0; central.forEach(c=> cenLen += c.length);
+    const end = [].concat(u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length),
+      u32(cenLen), u32(cenStart), u16(0));
+    const all = chunks.concat(central, [new Uint8Array(end)]);
+    let total = 0; all.forEach(a=> total += a.length);
+    const out = new Uint8Array(total); let pos = 0;
+    all.forEach(a=>{ out.set(a, pos); pos += a.length; });
+    return out;
+  }
+  function build(text){
+    const paras = text.split(/\r?\n/).map(ln=>{
+      // preserve leading spaces so the indented log lines keep their shape
+      const t = xmlEsc(ln);
+      return "<w:p><w:pPr><w:rPr><w:rFonts w:ascii=\"Consolas\" w:hAnsi=\"Consolas\" w:cs=\"Consolas\"/><w:sz w:val=\"18\"/></w:rPr></w:pPr>"
+           + "<w:r><w:rPr><w:rFonts w:ascii=\"Consolas\" w:hAnsi=\"Consolas\" w:cs=\"Consolas\"/><w:sz w:val=\"18\"/></w:rPr>"
+           + "<w:t xml:space=\"preserve\">" + t + "</w:t></w:r></w:p>";
+    }).join("");
+    const doc = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+      + "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
+      + "<w:body>" + paras + "<w:sectPr/></w:body></w:document>";
+    const contentTypes = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+      + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+      + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
+      + "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+      + "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>"
+      + "</Types>";
+    const rels = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+      + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+      + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>"
+      + "</Relationships>";
+    const bytes = zip([
+      { name:"[Content_Types].xml", text:contentTypes },
+      { name:"_rels/.rels",         text:rels },
+      { name:"word/document.xml",   text:doc },
+    ]);
+    return new Blob([bytes], {type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
+  }
+  return { build };
+})();
 
 /* ---------- human-readable session log (study mode only; download) ----------
    A plain-English record of the playthrough for the researcher, built from the
@@ -2850,9 +2930,9 @@ function renderResearchExport(R){
     if(!code){ $("studyLogMsg").textContent = "Please enter your personal code first."; return; }
     const text = buildSessionLog(code);
     const clean = code.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,12) || "nocode";
-    const fname = "CASE2606_session_" + clean + ".txt";
+    const fname = "CASE2606_session_" + clean + ".docx";
     try{
-      const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
+      const blob = CASE_DOCX.build(text);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = fname;
